@@ -2,9 +2,11 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const db = require('./database/dbConfig.js');
 const Users = require('./users/users-module.js');
+const secret = 'this is a test';
 
 const server = express();
 
@@ -18,7 +20,29 @@ server.get('/', (req, res) => {
 
 // ================================ Restricted Middleware
 function restricted(req, res, next) {
-	next();
+	const token = req.headers.authorization;
+	if (token) {
+		jwt.verify(token, secret, (err, decodedToken) => {
+			if (err) {
+				res.status(401).json({ message: "Don't tinker with the token" });
+			} else {
+				next();
+			}
+		});
+	} else {
+		res.status(401).json({ message: 'You shall not pass' });
+	}
+}
+// ================================ Generate Token
+function generateToken(user) {
+	const payload = {
+		subject: user.id,
+		username: user.username,
+	};
+	const options = {
+		expiresIn: '1d',
+	};
+	return jwt.sign(payload, secret, options);
 }
 
 // ================================ Register
@@ -49,7 +73,8 @@ server.post('/api/login', (req, res) => {
 		.then(user => {
 			// check that passwords match
 			if (user && bcrypt.compareSync(password, user.password)) {
-				res.status(200).json({ message: `Welcome ${user.username}!` });
+				const token = generateToken(user);
+				res.status(200).json({ message: `Welcome ${user.username}!`, token });
 			} else {
 				res.status(401).json({ message: 'Invalid Credentials' });
 			}

@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -6,7 +7,7 @@ const jwt = require('jsonwebtoken');
 
 const db = require('./database/dbConfig.js');
 const Users = require('./users/users-module.js');
-const secret = 'this is a test';
+const secret = process.env.JWT_SECRET;
 
 const server = express();
 
@@ -26,6 +27,7 @@ function restricted(req, res, next) {
 			if (err) {
 				res.status(401).json({ message: "Don't tinker with the token" });
 			} else {
+				req.decodedJWT = decodedToken;
 				next();
 			}
 		});
@@ -33,11 +35,22 @@ function restricted(req, res, next) {
 		res.status(401).json({ message: 'You shall not pass' });
 	}
 }
+// ================================ Check Role
+function checkRole(role) {
+	return function(req, res, next) {
+		if (req.decodedJWT.roles && req.decodedJWT.roles.includes(role)) {
+			next();
+		} else {
+			res.status(403).json({ message: "can't access due to role" });
+		}
+	};
+}
 // ================================ Generate Token
 function generateToken(user) {
 	const payload = {
 		subject: user.id,
 		username: user.username,
+		roles: ['student'],
 	};
 	const options = {
 		expiresIn: '1d',
@@ -86,10 +99,10 @@ server.post('/api/login', (req, res) => {
 
 // protect this route, only authenticated users should see it
 // ================================ Users (protected)
-server.get('/api/users', restricted, (req, res) => {
+server.get('/api/users', restricted, checkRole('TA'), (req, res) => {
 	Users.find()
 		.then(users => {
-			res.json(users);
+			res.json({ users, payload: req.decodedJWT });
 		})
 		.catch(err => res.send(err));
 });
